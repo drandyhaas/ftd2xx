@@ -196,6 +196,8 @@ class FTD2XX(AbstractContextManager):
         update to False to avoid a slow call to createDeviceInfoList."""
         self.handle = handle
         self.status = 1
+        self.cbuffer = None  # create initial buffer
+        self.cbufferlen = 0
         # createDeviceInfoList is slow, only run if update is True
         if update:
             createDeviceInfoList()
@@ -206,13 +208,22 @@ class FTD2XX(AbstractContextManager):
         call_ft(_ft.FT_Close, self.handle)
         self.status = 0
 
-    def read(self, nchars, raw=True):
+    def read(self, nchars, raw=True, cache=False, debug=False):
         """Read up to nchars bytes of data from the device. Can return fewer if
         timedout. Use getQueueStatus to find how many bytes are available"""
         b_read = _ft.DWORD()
-        b = c.c_buffer(nchars)
-        call_ft(_ft.FT_Read, self.handle, b, nchars, c.byref(b_read))
-        return b.raw[: b_read.value] if raw else b.value[: b_read.value]
+        if cache:
+            if nchars > self.cbufferlen:
+                if debug: print("FTD2XX/read: extending cache buffer of length", self.cbufferlen, "to", nchars)
+                self.cbuffer = c.create_string_buffer(nchars)
+                self.cbufferlen = nchars
+            if debug: print("FTD2XX/read: using cached buffer of length", self.cbufferlen)
+            call_ft(_ft.FT_Read, self.handle, self.cbuffer, nchars, c.byref(b_read))
+            return self.cbuffer.raw[: b_read.value] if raw else self.cbuffer.value[: b_read.value]
+        else:
+            b = c.c_buffer(nchars)
+            call_ft(_ft.FT_Read, self.handle, b, nchars, c.byref(b_read))
+            return b.raw[: b_read.value] if raw else b.value[: b_read.value]
 
     def write(self, data):
         """Send the data to the device. Data must be a string representing the

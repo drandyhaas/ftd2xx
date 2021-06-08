@@ -26,7 +26,7 @@ try:
 except:
     pass
 
-if version == "":
+if True or version == "":
     with open(os.path.join(mydir, "myversion.txt"), "r") as f:
         version = f.read().strip()
 
